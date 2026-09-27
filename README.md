@@ -44,9 +44,6 @@
   <img src="https://nami-music.ru/img/home.d83cb52e.webp" width="31%" alt="Nami — главный экран" />
   <img src="https://nami-music.ru/img/library.f3c07be6.webp" width="31%" alt="Nami — библиотека" />
   <img src="https://nami-music.ru/img/player.60dba2a7.webp" width="31%" alt="Nami — плеер" />
-</p>
-
-<p align="center">
   <img src="https://nami-music.ru/img/recap1.ac363360.webp" width="31%" alt="Nami — итоги прослушивания" />
 </p>
 
