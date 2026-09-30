@@ -154,7 +154,7 @@ jobs:
         with:
           msystem: ${{ matrix.msys }}
           update: false
-          install: make diffutils
+          install: make diffutils tar xz curl
           pacboy: ${{ matrix.msys == 'CLANGARM64' && 'clang:p' || 'gcc:p' }}
       - name: ffmpeg (unix)
         if: runner.os != 'Windows'
