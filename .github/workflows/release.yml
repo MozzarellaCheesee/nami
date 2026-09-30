@@ -172,11 +172,13 @@ jobs:
           msystem: ${{ matrix.msys }}
           update: false
           install: make diffutils tar xz curl
-          pacboy: ${{ matrix.msys == 'CLANGARM64' && 'clang:p' || 'gcc:p' }}
+          pacboy: ${{ matrix.msys == 'CLANGARM64' && 'clang:p libopenmpt:p pkgconf:p' || 'gcc:p libopenmpt:p pkgconf:p' }}
       - name: ffmpeg (unix)
         if: runner.os != 'Windows'
         shell: bash
-        run: bash src/apps/desktop/ffmpeg-min.sh ${{ matrix.target }} "src/apps/desktop/src-tauri/binaries/nami-ffmpeg-${{ matrix.target }}"
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then brew install -q pkgconf >/dev/null; fi
+          bash src/apps/desktop/ffmpeg-min.sh ${{ matrix.target }} "src/apps/desktop/src-tauri/binaries/nami-ffmpeg-${{ matrix.target }}"
       - name: ffmpeg for each macOS CPU
         if: matrix.target == 'universal-apple-darwin'
         # A universal build compiles each CPU separately, and each looks up its own sidecar name.
@@ -187,7 +189,7 @@ jobs:
       - name: ffmpeg (windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        env: { CC: "${{ matrix.msys == 'CLANGARM64' && 'clang' || '' }}" }
+        env: { CC: "${{ matrix.msys == 'CLANGARM64' && 'clang' || '' }}", CXX: "${{ matrix.msys == 'CLANGARM64' && 'clang++' || '' }}" }
         run: bash src/apps/desktop/ffmpeg-min.sh ${{ matrix.target }} "src/apps/desktop/src-tauri/binaries/nami-ffmpeg-${{ matrix.target }}.exe"
       - name: clang for ring on Windows arm64
         if: matrix.name == 'windows-arm64'
