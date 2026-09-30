@@ -32,8 +32,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - { arch: x86_64, os: ubuntu-22.04 }
-          - { arch: aarch64, os: ubuntu-22.04-arm }
+          - { arch: x86_64, os: ubuntu-24.04 }
+          - { arch: aarch64, os: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v4
         with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
@@ -56,7 +56,7 @@ jobs:
           mkdir -p pkg/discord-bridge
           cp /tmp/bb/nami-discord-bridge /tmp/sdk/lib/release/libdiscord_partner_sdk.so pkg/discord-bridge/
           cp /tmp/sdk/License-Notices.txt pkg/discord-bridge/Discord-SDK-License-Notices.txt
-          sudo apt-get install -y -qq --no-install-recommends patchelf libpulse0 libasound2 libx11-6 libatomic1 >/dev/null
+          sudo apt-get install -y -qq --no-install-recommends patchelf libpulse0 libasound2t64 libx11-6 libatomic1 >/dev/null
           patchelf --set-rpath '$ORIGIN' pkg/discord-bridge/nami-discord-bridge
           (cd pkg/discord-bridge && ./nami-discord-bridge --check)
       - name: Package
