@@ -160,6 +160,13 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: bash src/apps/desktop/ffmpeg-min.sh ${{ matrix.target }} "src/apps/desktop/src-tauri/binaries/nami-ffmpeg-${{ matrix.target }}"
+      - name: ffmpeg for each macOS CPU
+        if: matrix.target == 'universal-apple-darwin'
+        # A universal build compiles each CPU separately, and each looks up its own sidecar name.
+        run: |
+          B=src/apps/desktop/src-tauri/binaries
+          cp $B/nami-ffmpeg-universal-apple-darwin $B/nami-ffmpeg-aarch64-apple-darwin
+          cp $B/nami-ffmpeg-universal-apple-darwin $B/nami-ffmpeg-x86_64-apple-darwin
       - name: ffmpeg (windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
