@@ -201,6 +201,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           APPIMAGE_EXTRACT_AND_RUN: "1"
+          # asio-sys (ASIO output, Windows x64) generates its bindings with libclang.
+          LIBCLANG_PATH: C:Program Fileslvmbin
         run: |
           quiet() { set -o pipefail; "$@" 2>&1 | sed -E '/^ *[0-9]* *\|/d; /^ *= (note|help)/d'; }
           VER=$(sed -n 's/^version = "\(.*\)".*/\1/p' src/server/Cargo.toml | head -1)
