@@ -1,0 +1,257 @@
+# Builds a Nami release from the private source repo and publishes it here.
+#
+# The source never lands in this repo: every job checks it out on the runner with SOURCE_TOKEN,
+# nothing is cached, and only finished installers, server archives and scripts are uploaded.
+# Build output goes through `quiet`, which drops compiler warnings and the source lines that
+# rustc prints under an error, so the public logs show file names and messages only.
+#
+# Started by hand: gh workflow run release.yml -f tag=v1.2.3
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of the private source repo to build
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  TAG: ${{ inputs.tag }}
+  SOURCE_REPO: MozzarellaCheesee/nami-dev
+  RUSTFLAGS: -Awarnings
+  CARGO_TERM_COLOR: never
+
+jobs:
+  server-linux:
+    name: Server (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - { arch: x86_64, os: ubuntu-22.04 }
+          - { arch: aarch64, os: ubuntu-22.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        shell: bash
+        run: |
+          quiet() { set -o pipefail; "$@" 2>&1 | sed -E '/^ *[0-9]* *\|/d; /^ *= (note|help)/d'; }
+          quiet cargo build --release --manifest-path src/server/Cargo.toml
+          mkdir -p pkg && cp src/server/target/release/nami-server pkg/
+      - name: Discord bridge
+        if: matrix.arch == 'x86_64'
+        env: { GH_TOKEN: "${{ secrets.SOURCE_TOKEN }}" }
+        shell: bash
+        run: |
+          gh release download discord-sdk --repo "$SOURCE_REPO" --pattern 'discord-sdk-min.tar.gz' --dir /tmp
+          mkdir -p /tmp/sdk && tar -xzf /tmp/discord-sdk-min.tar.gz -C /tmp/sdk
+          cmake -S src/server/discord-bridge -B /tmp/bb -DCMAKE_BUILD_TYPE=Release -DDISCORD_SDK_INCLUDE_DIR=/tmp/sdk/include -DDISCORD_SDK_LIBRARY=/tmp/sdk/lib/release/libdiscord_partner_sdk.so >/dev/null
+          cmake --build /tmp/bb --config Release >/dev/null
+          mkdir -p pkg/discord-bridge
+          cp /tmp/bb/nami-discord-bridge /tmp/sdk/lib/release/libdiscord_partner_sdk.so pkg/discord-bridge/
+          cp /tmp/sdk/License-Notices.txt pkg/discord-bridge/Discord-SDK-License-Notices.txt
+          sudo apt-get install -y -qq --no-install-recommends patchelf libpulse0 libasound2 libx11-6 libatomic1 >/dev/null
+          patchelf --set-rpath '$ORIGIN' pkg/discord-bridge/nami-discord-bridge
+          (cd pkg/discord-bridge && ./nami-discord-bridge --check)
+      - name: Package
+        run: tar -czf nami-server-linux-${{ matrix.arch }}.tar.gz -C pkg .
+      - uses: actions/upload-artifact@v4
+        with: { name: "server-linux-${{ matrix.arch }}", path: "nami-server-linux-${{ matrix.arch }}.tar.gz" }
+
+  server-windows:
+    name: Server (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        shell: bash
+        run: |
+          quiet() { set -o pipefail; "$@" 2>&1 | sed -E '/^ *[0-9]* *\|/d; /^ *= (note|help)/d'; }
+          quiet cargo build --release --manifest-path src/server/Cargo.toml
+      - name: Discord bridge and package
+        shell: pwsh
+        env: { GH_TOKEN: "${{ secrets.SOURCE_TOKEN }}" }
+        run: |
+          gh release download discord-sdk --repo $env:SOURCE_REPO --pattern 'discord-sdk-min.tar.gz' --dir $env:RUNNER_TEMP
+          $sdk = Join-Path $env:RUNNER_TEMP "sdk"
+          New-Item -ItemType Directory -Force $sdk | Out-Null
+          tar -xzf (Join-Path $env:RUNNER_TEMP "discord-sdk-min.tar.gz") -C $sdk
+          cmake -S src/server/discord-bridge -B bb -A x64 "-DDISCORD_SDK_INCLUDE_DIR=$sdk/include" "-DDISCORD_SDK_LIBRARY=$sdk/lib/release/discord_partner_sdk.lib" | Out-Null
+          cmake --build bb --config Release | Out-Null
+          New-Item -ItemType Directory -Force pkg\discord-bridge | Out-Null
+          Copy-Item bb\Release\nami-discord-bridge.exe pkg\discord-bridge\
+          Copy-Item "$sdk\bin\release\discord_partner_sdk.dll" pkg\discord-bridge\
+          Copy-Item "$sdk\License-Notices.txt" pkg\discord-bridge\Discord-SDK-License-Notices.txt
+          & pkg\discord-bridge\nami-discord-bridge.exe --check
+          Copy-Item src\server\target\release\nami-server.exe pkg\
+          Compress-Archive -Path pkg\* -DestinationPath nami-server-windows-x86_64.zip -Force
+      - uses: actions/upload-artifact@v4
+        with: { name: server-windows, path: nami-server-windows-x86_64.zip }
+
+  # Never blocks the release: the image package may still be tied to the old source repo.
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/nami-server
+          tags: |
+            type=raw,value=${{ inputs.tag }}
+            type=raw,value=latest,enable=${{ !contains(inputs.tag, '-') }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: src
+          file: src/server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundles: "appimage,deb,rpm" }
+          - { name: linux-arm64, os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, bundles: "appimage,deb,rpm" }
+          - { name: windows-x64, os: windows-latest, target: x86_64-pc-windows-msvc, bundles: nsis, msys: MINGW64 }
+          - { name: windows-arm64, os: windows-11-arm, target: aarch64-pc-windows-msvc, bundles: nsis, msys: CLANGARM64 }
+          - { name: macos-universal, os: macos-latest, target: universal-apple-darwin, bundles: dmg }
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libdbus-1-dev rpm xdg-utils nasm >/dev/null
+      - name: MSYS2 for ffmpeg
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msys }}
+          update: false
+          install: make diffutils
+          pacboy: ${{ matrix.msys == 'CLANGARM64' && 'clang:p' || 'gcc:p' }}
+      - name: ffmpeg (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash src/apps/desktop/ffmpeg-min.sh ${{ matrix.target }} "src/apps/desktop/src-tauri/binaries/nami-ffmpeg-${{ matrix.target }}"
+      - name: ffmpeg (windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        env: { CC: "${{ matrix.msys == 'CLANGARM64' && 'clang' || '' }}" }
+        run: bash src/apps/desktop/ffmpeg-min.sh ${{ matrix.target }} "src/apps/desktop/src-tauri/binaries/nami-ffmpeg-${{ matrix.target }}.exe"
+      - name: clang for ring on Windows arm64
+        if: matrix.name == 'windows-arm64'
+        shell: bash
+        run: echo "C:\Program Files\LLVM\bin" >> $GITHUB_PATH
+      - name: Build and sign
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          quiet() { set -o pipefail; "$@" 2>&1 | sed -E '/^ *[0-9]* *\|/d; /^ *= (note|help)/d'; }
+          VER=$(sed -n 's/^version = "\(.*\)".*/\1/p' src/server/Cargo.toml | head -1)
+          cd src/apps/desktop
+          npm ci --silent
+          quiet npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} \
+            --config "{\"version\":\"$VER\",\"bundle\":{\"externalBin\":[\"binaries/nami-ffmpeg\"]}}"
+          B=src-tauri/target/${{ matrix.target }}/release/bundle
+          OUT=$GITHUB_WORKSPACE/out && mkdir -p $OUT
+          case "${{ matrix.name }}" in
+            windows-*)
+              ARCH=${{ matrix.name }}; ARCH=${ARCH#windows-}
+              EXE=$(ls $B/nsis/*-setup.exe)
+              cp "$EXE" "$OUT/Nami-$VER-windows-$ARCH-setup.exe"; cp "$EXE.sig" "$OUT/Nami-$VER-windows-$ARCH-setup.exe.sig" ;;
+            linux-*)
+              ARCH=${{ matrix.name }}; ARCH=${ARCH#linux-}
+              DEBARCH=$([ "$ARCH" = arm64 ] && echo arm64 || echo amd64); RPMARCH=$([ "$ARCH" = arm64 ] && echo aarch64 || echo x86_64)
+              APP=$(ls $B/appimage/*.AppImage)
+              cp "$APP" "$OUT/Nami-$VER-linux-$ARCH.AppImage"; cp "$APP.sig" "$OUT/Nami-$VER-linux-$ARCH.AppImage.sig"
+              cp $B/deb/*.deb "$OUT/nami_${VER}_${DEBARCH}.deb"; cp $B/rpm/*.rpm "$OUT/nami-${VER}-1.${RPMARCH}.rpm" ;;
+            macos-*)
+              cp $B/dmg/*.dmg "$OUT/Nami-$VER-macos-universal.dmg" ;;
+          esac
+          ls -la $OUT
+      - uses: actions/upload-artifact@v4
+        with: { name: "desktop-${{ matrix.name }}", path: out/* }
+
+  publish:
+    name: Publish
+    needs: [server-linux, server-windows, desktop]
+    # A failed desktop platform must not hold the release; its users simply get no update this time.
+    if: always() && needs.server-linux.result == 'success' && needs.server-windows.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src, sparse-checkout: "server/deploy\nserver/Cargo.toml\napps/android/app/build.gradle.kts", sparse-checkout-cone-mode: false }
+      - uses: actions/download-artifact@v4
+        with: { path: art }
+      - uses: actions/checkout@v4
+        with: { path: pub, sparse-checkout: CHANGELOG.md }
+      - name: Assemble
+        shell: bash
+        run: |
+          mkdir -p dist
+          find art -type f -exec cp {} dist/ \;
+          cp src/server/deploy/install.sh src/server/deploy/install.ps1 dist/
+          VER=$(sed -n 's/^version = "\(.*\)".*/\1/p' src/server/Cargo.toml | head -1)
+          APP=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' src/apps/android/app/build.gradle.kts | head -1)
+          BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
+          entry() { [ -f "dist/$2.sig" ] || return 0; jq -n --arg k "$1" --arg s "$(cat "dist/$2.sig")" --arg u "$BASE/$2" '{($k): {signature: $s, url: $u}}'; }
+          {
+            entry windows-x86_64 "Nami-$VER-windows-x64-setup.exe"
+            entry windows-aarch64 "Nami-$VER-windows-arm64-setup.exe"
+            entry linux-x86_64 "Nami-$VER-linux-x86_64.AppImage"
+            entry linux-aarch64 "Nami-$VER-linux-arm64.AppImage"
+          } > entries.json
+          NOTES=$(awk -v v="## $TAG " 'index($0, v) == 1 {on=1; next} /^## / {on=0} on' pub/CHANGELOG.md 2>/dev/null | tr -d '\r' | sed '/^$/d')
+          [ -s entries.json ] && jq -s --arg v "$VER" --arg n "$(echo "$NOTES" | sed 's/^- /• /')" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version: $v, notes: $n, pub_date: $d, platforms: add}' entries.json > dist/latest.json
+          rm -f dist/*.sig
+          {
+            echo "$NOTES"
+            echo
+            echo "## Nami $TAG"
+            echo
+            echo "* Android: \`$APP\` · сервер и ПК: \`$VER\`"
+            echo "* Что нового: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)"
+            echo "* Установка сервера: [README](https://github.com/${{ github.repository }}#поставить-сервер)"
+          } > body.md
+          ls -la dist
+      - name: Release
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        shell: bash
+        run: |
+          PRE=$([[ "$TAG" == *-* ]] && echo --prerelease || echo --latest)
+          if gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber -R "${{ github.repository }}"
+          else
+            gh release create "$TAG" dist/* -R "${{ github.repository }}" --title "Nami $TAG" --notes-file body.md $PRE --target main
+          fi
