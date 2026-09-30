@@ -96,14 +96,32 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: server-windows, path: nami-server-windows-x86_64.zip }
 
-  # Never blocks the release: the image package may still be tied to the old source repo.
+  # Packs the server binaries built above, so no source is compiled here. Never blocks the release.
   docker:
     name: Docker image
+    needs: server-linux
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-        with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
+      - uses: actions/download-artifact@v4
+        with: { pattern: "server-linux-*", path: art, merge-multiple: true }
+      - name: Context
+        run: |
+          mkdir -p ctx/amd64 ctx/arm64
+          tar -xzf art/nami-server-linux-x86_64.tar.gz -C ctx/amd64
+          tar -xzf art/nami-server-linux-aarch64.tar.gz -C ctx/arm64
+          cat > ctx/Dockerfile <<'DOCKER'
+          FROM debian:stable-slim
+          ARG TARGETARCH
+          # ffmpeg transcodes the stream profiles; libstdc++6 is for the karaoke alignment (ONNX Runtime).
+          RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg libstdc++6 && rm -rf /var/lib/apt/lists/*
+          COPY ${TARGETARCH}/nami-server /usr/local/bin/nami-server
+          ENV NAMI_MUSIC_DIRS=/music NAMI_DB_PATH=/data/nami.db NAMI_DATA_DIR=/data NAMI_PORT=4533
+          VOLUME ["/data"]
+          EXPOSE 4533
+          WORKDIR /data
+          ENTRYPOINT ["/usr/local/bin/nami-server"]
+          DOCKER
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -117,8 +135,7 @@ jobs:
             type=raw,value=latest,enable=${{ !contains(inputs.tag, '-') }}
       - uses: docker/build-push-action@v5
         with:
-          context: src
-          file: src/server/Dockerfile
+          context: ctx
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
