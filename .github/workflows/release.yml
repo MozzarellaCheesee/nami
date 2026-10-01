@@ -82,7 +82,7 @@ jobs:
           AR_riscv64gc_unknown_linux_gnu: riscv64-linux-gnu-ar
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends gcc-riscv64-linux-gnu g++-riscv64-linux-gnu libc6-dev-riscv64-cross >/dev/null
-          quiet() { set -o pipefail; "$@" 2>&1 | sed -E '/^ *[0-9]* *|/d; /^ *= (note|help)/d'; }
+          quiet() { set -o pipefail; "$@" 2>&1 | sed -E '/^ *[0-9]* *\|/d; /^ *= (note|help)/d'; }
           quiet cargo build --release --no-default-features --target riscv64gc-unknown-linux-gnu --manifest-path src/server/Cargo.toml
           mkdir -p pkg && cp src/server/target/riscv64gc-unknown-linux-gnu/release/nami-server pkg/
           tar -czf nami-server-linux-riscv64.tar.gz -C pkg .
