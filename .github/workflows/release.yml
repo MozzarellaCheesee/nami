@@ -64,6 +64,31 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: "server-linux-${{ matrix.arch }}", path: "nami-server-linux-${{ matrix.arch }}.tar.gz" }
 
+  # ONNX Runtime has no riscv64 build: this server goes without karaoke word timings (--no-default-features).
+  server-riscv64:
+    name: Server (riscv64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: riscv64gc-unknown-linux-gnu }
+      - name: Build
+        shell: bash
+        env:
+          CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_LINKER: riscv64-linux-gnu-gcc
+          CC_riscv64gc_unknown_linux_gnu: riscv64-linux-gnu-gcc
+          CXX_riscv64gc_unknown_linux_gnu: riscv64-linux-gnu-g++
+          AR_riscv64gc_unknown_linux_gnu: riscv64-linux-gnu-ar
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends gcc-riscv64-linux-gnu g++-riscv64-linux-gnu libc6-dev-riscv64-cross >/dev/null
+          quiet() { set -o pipefail; "$@" 2>&1 | sed -E '/^ *[0-9]* *|/d; /^ *= (note|help)/d'; }
+          quiet cargo build --release --no-default-features --target riscv64gc-unknown-linux-gnu --manifest-path src/server/Cargo.toml
+          mkdir -p pkg && cp src/server/target/riscv64gc-unknown-linux-gnu/release/nami-server pkg/
+          tar -czf nami-server-linux-riscv64.tar.gz -C pkg .
+      - uses: actions/upload-artifact@v4
+        with: { name: server-riscv64, path: nami-server-linux-riscv64.tar.gz }
+
   server-windows:
     name: Server (windows)
     runs-on: windows-latest
@@ -232,7 +257,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [server-linux, server-windows, desktop]
+    needs: [server-linux, server-riscv64, server-windows, desktop]
     # A failed desktop platform must not hold the release; its users simply get no update this time.
     if: always() && needs.server-linux.result == 'success' && needs.server-windows.result == 'success'
     runs-on: ubuntu-latest
