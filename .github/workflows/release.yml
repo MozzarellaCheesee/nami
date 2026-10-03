@@ -308,3 +308,38 @@ jobs:
           else
             gh release create "$TAG" dist/* -R "${{ github.repository }}" --title "Nami $TAG" --notes-file body.md $PRE --target main
           fi
+
+  repo:
+    name: Package repository
+    needs: publish
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
+      # gh-pages holds both channels; this release replaces only its own.
+      - uses: actions/checkout@v4
+        with: { ref: gh-pages, path: site }
+        continue-on-error: true
+      - name: Build
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}", KEY: "${{ secrets.APT_GPG_KEY }}" }
+        shell: bash
+        run: |
+          sudo apt-get install -y -qq createrepo-c >/dev/null
+          echo "$KEY" | gpg --batch --import
+          mkdir -p pkgs site
+          gh release download "$TAG" -R "${{ github.repository }}" -p '*.deb' -p '*.rpm' -D pkgs
+          CH=$([[ "$TAG" == *-* ]] && echo beta || echo stable)
+          bash src/apps/desktop/linux/pkgrepo.sh pkgs site "$CH"
+          # Stable is also the newest beta when no beta is newer: a beta user is never left behind.
+          [ "$CH" = stable ] && bash src/apps/desktop/linux/pkgrepo.sh pkgs site beta
+          touch site/.nojekyll
+      - name: Publish
+        shell: bash
+        run: |
+          # One commit, no history: packages are ~120 MB a release and Pages has a size limit.
+          cd site
+          rm -rf .git
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name=nami-release -c user.email=release@nami-music.ru commit -q -m "packages $TAG"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
