@@ -35,7 +35,7 @@ jobs:
           - { arch: x86_64, os: ubuntu-24.04 }
           - { arch: aarch64, os: ubuntu-24.04-arm }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
       - uses: dtolnay/rust-toolchain@stable
       - name: Build
@@ -61,7 +61,7 @@ jobs:
           (cd pkg/discord-bridge && ./nami-discord-bridge --check)
       - name: Package
         run: tar -czf nami-server-linux-${{ matrix.arch }}.tar.gz -C pkg .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with: { name: "server-linux-${{ matrix.arch }}", path: "nami-server-linux-${{ matrix.arch }}.tar.gz" }
 
   # ONNX Runtime has no riscv64 build: this server goes without karaoke word timings (--no-default-features).
@@ -69,7 +69,7 @@ jobs:
     name: Server (riscv64)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: riscv64gc-unknown-linux-gnu }
@@ -86,14 +86,14 @@ jobs:
           quiet cargo build --release --no-default-features --target riscv64gc-unknown-linux-gnu --manifest-path src/server/Cargo.toml
           mkdir -p pkg && cp src/server/target/riscv64gc-unknown-linux-gnu/release/nami-server pkg/
           tar -czf nami-server-linux-riscv64.tar.gz -C pkg .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with: { name: server-riscv64, path: nami-server-linux-riscv64.tar.gz }
 
   server-windows:
     name: Server (windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
       - uses: dtolnay/rust-toolchain@stable
       - name: Build
@@ -118,7 +118,7 @@ jobs:
           & pkg\discord-bridge\nami-discord-bridge.exe --check
           Copy-Item src\server\target\release\nami-server.exe pkg\
           Compress-Archive -Path pkg\* -DestinationPath nami-server-windows-x86_64.zip -Force
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with: { name: server-windows, path: nami-server-windows-x86_64.zip }
 
   # Packs the server binaries built above, so no source is compiled here. Never blocks the release.
@@ -128,7 +128,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with: { pattern: "server-linux-*", path: art, merge-multiple: true }
       - name: Context
         run: |
@@ -178,12 +178,12 @@ jobs:
           - { name: windows-arm64, os: windows-11-arm, target: aarch64-pc-windows-msvc, bundles: nsis, msys: CLANGARM64 }
           - { name: macos-universal, os: macos-latest, target: universal-apple-darwin, bundles: dmg }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - name: Linux dependencies
         if: runner.os == 'Linux'
@@ -252,7 +252,7 @@ jobs:
               cp $B/dmg/*.dmg "$OUT/Nami-$VER-macos-universal.dmg" ;;
           esac
           ls -la $OUT
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with: { name: "desktop-${{ matrix.name }}", path: out/* }
 
   publish:
@@ -262,11 +262,11 @@ jobs:
     if: always() && needs.server-linux.result == 'success' && needs.server-windows.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src, sparse-checkout: "server/deploy\nserver/Cargo.toml\napps/android/app/build.gradle.kts", sparse-checkout-cone-mode: false }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with: { path: art }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { path: pub, sparse-checkout: CHANGELOG.md }
       - name: Assemble
         shell: bash
@@ -314,10 +314,10 @@ jobs:
     needs: publish
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { repository: "${{ env.SOURCE_REPO }}", ref: "${{ env.TAG }}", token: "${{ secrets.SOURCE_TOKEN }}", path: src }
       # gh-pages holds both channels; this release replaces only its own.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { ref: gh-pages, path: site }
         continue-on-error: true
       - name: Build
