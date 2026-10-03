@@ -164,7 +164,7 @@ if ($ffmpegCmd) {
     $installed = $false
     if ($wingetCmd) {
         try {
-            Start-Process winget -ArgumentList "install -e --id Gyan.FFmpeg --accept-source-agreements --accept-package-agreements --silent" -Wait -NoNewWindow
+            Start-Process winget -ArgumentList "install -e --id Gyan.FFmpeg --scope machine --accept-source-agreements --accept-package-agreements --silent" -Wait -NoNewWindow
             # winget правит PATH в реестре, а текущий процесс держит его старое значение. Без
             # перечтения только что установленный (или уже стоявший) ffmpeg считается отсутствующим.
             $env:PATH = (@(
