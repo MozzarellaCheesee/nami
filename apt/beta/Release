@@ -1,0 +1,20 @@
+Date: Sat, 03 Oct 2026 03:00:03 +0000
+Label: Nami
+Origin: Nami
+Suite: beta
+MD5Sum:
+ 2e41a5e60177c94dac86b395231fb650             1880 Packages
+ a4c9ab3e3c5f47c1ec8ee5e16f91adc0              884 Packages.gz
+ 552b3ef786a7549b7ec2d2037d1ef451               75 Release
+SHA1:
+ e05182151a7baeeb9251f13bbfed353448405d5e             1880 Packages
+ 2a353f232ab974b00c97a22a7e9d8ce233bec961              884 Packages.gz
+ 09015084893e57e1548dbf028b9a299bd856e66a               75 Release
+SHA256:
+ a24150013e14138b6548388ca8ac3bd766580827ac69fd7e61689131bc0d013e             1880 Packages
+ 04f9535f497fafaed828206d3d64fa65116157405d80f44c5beeb87364cac8c8              884 Packages.gz
+ 25aab34bf74cbae0435addf8d18ba057faa41402158d78ddeff4e99ee2e1d8d0               75 Release
+SHA512:
+ c2c1a102e009ae2609b1e9710d45aa1330297b2b2d3535bc2d9763e3cbc5d6a8f542e739ff44b3725c9aba8b92b5d5f1642b118fb6d2516d44a092d3b227c2dd             1880 Packages
+ 55af5581e8ad1e52f71d2a7f08fac1c81c7f84d2b413f86668713cf5faaf9c1b916c91dd7ea5d2c7507d5f3978deeb073745a04d49f96309646878a98921484e              884 Packages.gz
+ 5962aa1e747bbdfb32ebf5b18c30eef2faccb3219a38569a42376db5c5eb1ac3cb7dcf64efa78ef1bcd4b6d30d6a13651235d4551273e8fbb087d7e9df0f7fb3               75 Release
