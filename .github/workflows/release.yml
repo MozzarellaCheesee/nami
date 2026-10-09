@@ -29,10 +29,15 @@ jobs:
   server-linux:
     name: Server (${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
+    # The noavx variant must not hold the release.
+    continue-on-error: ${{ matrix.arch == 'x86_64-noavx' }}
     strategy:
       matrix:
         include:
           - { arch: x86_64, os: ubuntu-24.04 }
+          # For x86-64 CPUs without AVX: the prebuilt ONNX Runtime runs AVX code before main and the server
+          # dies with SIGILL at start. Same server without it, so no karaoke word timings.
+          - { arch: x86_64-noavx, os: ubuntu-24.04, flags: --no-default-features }
           - { arch: aarch64, os: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v5
@@ -42,10 +47,10 @@ jobs:
         shell: bash
         run: |
           quiet() { set -o pipefail; "$@" 2>&1 | sed -E '/^ *[0-9]* *\|/d; /^ *= (note|help)/d'; }
-          quiet cargo build --release --manifest-path src/server/Cargo.toml
+          quiet cargo build --release ${{ matrix.flags }} --manifest-path src/server/Cargo.toml
           mkdir -p pkg && cp src/server/target/release/nami-server pkg/
       - name: Discord bridge
-        if: matrix.arch == 'x86_64'
+        if: startsWith(matrix.arch, 'x86_64')
         env: { GH_TOKEN: "${{ secrets.SOURCE_TOKEN }}" }
         shell: bash
         run: |
@@ -120,6 +125,18 @@ jobs:
           Compress-Archive -Path pkg\* -DestinationPath nami-server-windows-x86_64.zip -Force
       - uses: actions/upload-artifact@v5
         with: { name: server-windows, path: nami-server-windows-x86_64.zip }
+      # For CPUs without AVX, as on Linux: built second, over the first exe, with the same pkg folder.
+      - name: Build and package (noavx)
+        continue-on-error: true
+        shell: bash
+        run: |
+          quiet() { set -o pipefail; "$@" 2>&1 | sed -E '/^ *[0-9]* *\|/d; /^ *= (note|help)/d'; }
+          quiet cargo build --release --no-default-features --manifest-path src/server/Cargo.toml
+          cp src/server/target/release/nami-server.exe pkg/
+          pwsh -NoProfile -Command "Compress-Archive -Path pkg\* -DestinationPath nami-server-windows-x86_64-noavx.zip -Force"
+      - uses: actions/upload-artifact@v5
+        continue-on-error: true
+        with: { name: server-windows-noavx, path: nami-server-windows-x86_64-noavx.zip }
 
   # Packs the server binaries built above, so no source is compiled here. Never blocks the release.
   docker:
@@ -164,6 +181,25 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+      # The image for x86-64 CPUs without AVX: tags <version>-noavx and latest-noavx.
+      - name: Context (noavx)
+        run: |
+          mkdir -p ctx/noavx/amd64
+          tar -xzf art/nami-server-linux-x86_64-noavx.tar.gz -C ctx/noavx/amd64
+          cp ctx/Dockerfile ctx/noavx/Dockerfile
+      - id: meta-noavx
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/nami-server
+          tags: |
+            type=raw,value=${{ inputs.tag }}-noavx
+            type=raw,value=latest-noavx,enable=${{ !contains(inputs.tag, '-') }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: ctx/noavx
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-noavx.outputs.tags }}
 
   desktop:
     name: Desktop (${{ matrix.name }})
