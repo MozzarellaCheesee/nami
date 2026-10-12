@@ -1,0 +1,36 @@
+Package: nami
+Architecture: amd64
+Version: 1.1.3
+Priority: optional
+Section: sound
+Maintainer: Nami
+Installed-Size: 43203
+Depends: pipewire-alsa | libasound2-plugins, libappindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0
+Filename: ./nami_1.1.3_amd64.deb
+Size: 31688208
+MD5sum: c4090f0e8bf1404ddebc279f264ede81
+SHA1: 278fd12c82260f06345e9d733229a75b4b8110b2
+SHA256: 9515041aff34778f91b9ebf2a25189d6581e2ff2aedf8c91a563504e118d6570
+SHA512: 59e1be9eaac3fe14984ca8fde9a0d910c06faf137a65464ba016c6f8079e943eb7ec22e54840cef2ee06c0baad285956478381146bc317ece210f782f484787d
+Homepage: https://nami-music.ru
+Description: Nami — музыкальный плеер
+ Плеер для вашей музыкальной библиотеки на сервере Nami и на компьютере: bit-perfect вывод, эквалайзер, синхронизация с телефоном, переключение устройств.
+
+Package: nami
+Architecture: arm64
+Version: 1.1.3
+Priority: optional
+Section: sound
+Maintainer: Nami
+Installed-Size: 40593
+Depends: pipewire-alsa | libasound2-plugins, libappindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0
+Filename: ./nami_1.1.3_arm64.deb
+Size: 31324690
+MD5sum: bce4bf17b4a3c3e058a78dcc3d79f65f
+SHA1: fe7aea8189cb9adb72715596737ad22d5dc29a9a
+SHA256: f354e0cc2bb8143950bf984c38a293aa52a1509a587f03e8d25590e8e9768d63
+SHA512: 71fc4b63ab9ccf348fd368c8a4ca49d6d5c9bc70d2667e0f699cc0dd41a76fbb81b3bb9a4faa5c9e6e812fe465f11d7b5a67af5fb61c8fbe9883f77e01d49e6c
+Homepage: https://nami-music.ru
+Description: Nami — музыкальный плеер
+ Плеер для вашей музыкальной библиотеки на сервере Nami и на компьютере: bit-perfect вывод, эквалайзер, синхронизация с телефоном, переключение устройств.
+
